@@ -72,6 +72,8 @@ objective_exp_discount_nll <- function(par, data_ppn) {
 
   # precomputing constants for NLL
   d <- 2
+  detS <- det(Sigma)
+  invS <- solve(Sigma)
   const <- d * log(2*pi) + log(detS)
 
   nll <- 0
@@ -116,3 +118,141 @@ objective_exp_discount_LS <- function(par, data_ppn) {
 
   as.numeric(ssr)
 }
+
+# Recovery study with one participant
+library(MASS)
+library(ggplot2)
+
+data = read.csv('Data_CIAC.csv')
+
+ppn_id <- data$Ppn[1]
+data_ppn_template <- subset(data, Ppn == ppn_id)
+
+Tn_template <- nrow(data_ppn_template)
+x_template  <- as.numeric(data_ppn_template$Won)
+
+# Simulation under exponential discounting model
+
+simulate_exp_discount <- function(Tn, x, par_true) {
+
+  alpha <- par_true[1:2]
+  Gamma <- diag(par_true[3:4])
+  beta  <- matrix(par_true[5:6], 2, 1)
+
+  g <- matrix(0, 2, 2)
+  g[lower.tri(g, diag = TRUE)] <- par_true[7:9]
+  Sigma <- g %*% t(g)
+
+  # simulate eps_t ~ MVN(0, Sigma)
+  eps <- mvrnorm(n = Tn, mu = c(0,0), Sigma = Sigma)
+
+  y <- matrix(NA, nrow = Tn, ncol = 2)
+  h <- c(0, 0)
+
+  for (t in 1:Tn) {
+    h <- as.numeric(beta * x[t] + Gamma %*% h)
+    mu <- alpha + h
+    y[t, ] <- mu + eps[t, ]
+  }
+
+  # return a data frame like the original data
+  out <- data.frame(
+    TrialNumber = 1:Tn,
+    Won = x,
+    PAscore = y[,1],
+    NAscore = y[,2]
+  )
+  out
+}
+
+# Bounds + parameter sampler
+# Parameter order:
+# 1:2 alpha (PA, NA)
+# 3:4 gamma (PA, NA)
+# 5:6 beta  (PA, NA)
+# 7:9 g11, g21, g22 (lower-triangular entries of g)
+
+lower <- c(
+  -5, -5,        # alpha
+   0,  0,        # gamma
+  -5, -5,        # beta
+   0.05, -2, 0.05  # g11>0, g21 free, g22>0
+)
+
+upper <- c(
+   5,  5,        # alpha
+  0.999, 0.999,  # gamma
+   5,  5,        # beta
+   3,   2,  3    # g entries
+)
+
+sample_par <- function(lower, upper) runif(length(lower), min = lower, max = upper)
+
+
+# DEoptim Estimation with nll
+
+estimate_par_DEoptim <- function(data_sim, lower, upper, itermax = 1500) {
+  fit <- DEoptim(
+    fn = objective_exp_discount_nll,
+    lower = lower,
+    upper = upper,
+    control = DEoptim.control(itermax = itermax, trace = FALSE),
+    data_ppn = data_sim
+  )
+  fit$optim$bestmem
+}
+
+
+# Recovery study loop (N = 100)
+
+set.seed(123)
+
+N <- 100
+true_mat <- matrix(NA, nrow = N, ncol = length(lower))
+est_mat  <- matrix(NA, nrow = N, ncol = length(lower))
+
+for (i in 1:N) {
+  par_true <- sample_par(lower, upper)
+
+  # Use the same T and the same x series as the study participant
+  data_sim <- simulate_exp_discount(Tn = Tn_template, x = x_template, par_true = par_true)
+
+  par_est <- estimate_par_DEoptim(data_sim, lower, upper, itermax = 300)
+
+  true_mat[i, ] <- par_true
+  est_mat[i, ]  <- par_est
+
+  cat("Done", i, "of", N, "\n")
+}
+
+colnames(true_mat) <- colnames(est_mat) <- c(
+  "alpha_PA","alpha_NA","gamma_PA","gamma_NA","beta_PA","beta_NA","g11","g21","g22"
+)
+
+df_rec <- data.frame(
+  rep = 1:N,
+  true_mat,
+  est_mat
+)
+
+# Long format for plotting
+df_long <- do.call(rbind, lapply(colnames(true_mat), function(p) {
+  data.frame(
+    param = p,
+    true  = true_mat[, p],
+    est   = est_mat[, p]
+  )
+}))
+
+# Visualization: true vs estimated with y=x line
+
+ggplot(df_long, aes(x = true, y = est)) +
+  geom_point(alpha = 0.6) +
+  geom_abline(intercept = 0, slope = 1) +
+  facet_wrap(~ param, scales = "free") +
+  labs(
+    title = "Parameter recovery: True vs Estimated (N=100)",
+    x = "True value",
+    y = "Estimated value"
+  ) +
+  theme_minimal()
