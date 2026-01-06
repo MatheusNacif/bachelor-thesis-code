@@ -1,5 +1,8 @@
 
 # Moving-window test for T = 152 trials (ppn 1 only)
+# With this code I want to test different moving-window sizes to find a sweet spot
+# that balances parameter stability and goodness-of-fit.
+
 
 
 library(DEoptim)
@@ -168,9 +171,9 @@ summary_df <- bind_rows(lapply(all_results, function(res) {
 
 print(summary_df)
 
-# Pick a "sweet spot" with a combined score 
+# Pick a sweet spot with a combined score 
 # Score = mean_obj_per_trial + lambda * instability
-# Increase lambda if you care more about stability than fit.
+
 lambda <- 0.25
 summary_df <- summary_df %>%
   mutate(score = mean_obj_per_trial + lambda * instability) %>%
@@ -182,20 +185,4 @@ print(head(summary_df, 5))
 sweetspot <- summary_df$window_size[1]
 cat("\n Sweet spot window size:", sweetspot, "\n")
 
-# Plots
-p1 <- ggplot(summary_df, aes(x = window_size, y = mean_obj_per_trial)) +
-  geom_line() + geom_point() +
-  labs(title = "Average objective per trial vs window size",
-       x = "Window size (trials)", y = "Mean objective / trial")
 
-p2 <- ggplot(summary_df, aes(x = window_size, y = instability)) +
-  geom_line() + geom_point() +
-  labs(title = "Parameter instability vs window size",
-       x = "Window size (trials)", y = "Instability (avg sd/|mean|)")
-
-p3 <- ggplot(summary_df, aes(x = window_size, y = score)) +
-  geom_line() + geom_point() +
-  labs(title = paste0("Combined score vs window size (lambda=", lambda, ")"),
-       x = "Window size (trials)", y = "Score (lower is better)")
-
-print(p1); print(p2); print(p3)
