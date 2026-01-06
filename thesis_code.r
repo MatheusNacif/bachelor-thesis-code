@@ -184,6 +184,8 @@ lag1_acf <- function(e_mat) {
 # DEoptim Bounds
 ##############################################
 
+# The following bounds are based on prior literature and practical considerations
+
 bounds_linear <- list(
   lower = c(
     -5, -5,        # alpha
@@ -232,6 +234,9 @@ p_vec_pt     <- length(bounds_pt$lower)
 
 DE_ctrl_stationary_lin <- DEoptim.control(NP = p_vec_linear * 10, itermax = 200, trace = FALSE)
 DE_ctrl_stationary_pt <- DEoptim.control(NP = p_vec_pt * 10, itermax = 200, trace = FALSE)
+
+# The following function fits both models to one participant's data
+# and returns parameter estimates, fit metrics, LR test, and residual diagnostics
 
 fit_stationary <- function(data_ppn) {
   data_ppn <- data_ppn[order(data_ppn$TrialNumber), ]
@@ -283,6 +288,9 @@ fit_stationary <- function(data_ppn) {
 DE_ctrl_window_lin <- DEoptim.control(NP = p_vec_linear * 10, itermax = 120, trace = FALSE)
 DE_ctrl_window_pt <- DEoptim.control(NP = p_vec_pt * 10, itermax = 120, trace = FALSE)
 
+# The following function performs moving-window estimation for one participant
+# and returns a data frame with parameter trajectories and nll per window
+
 moving_window <- function(data_ppn, model = c("linear","pt"), window = 60) {
   model <- match.arg(model)
   data_ppn <- data_ppn[order(data_ppn$TrialNumber), ]
@@ -329,6 +337,10 @@ moving_window <- function(data_ppn, model = c("linear","pt"), window = 60) {
 ################################################
 # Full Analysis Across Participants
 ################################################
+
+# The following function runs the full analysis across all participants
+# It fits both models, computes fit metrics, LR tests, residual diagnostics,
+# and moving-window trajectories for each participant
 
 run_analysis <- function(data, id_col = "Ppn", window = 70) {
   ids <- unique(data[[id_col]])
@@ -418,7 +430,7 @@ summary(results$summary$acfNA_lin - results$summary$acfNA_pt)
 
 params_to_check <- c("beta_PA", "beta_NA", "gamma_PA", "gamma_NA")
 
-# Helper: add all participants' trajectories to an existing plot
+# add all participants' trajectories to an existing plot
 add_all_participants_lines <- function(mw_list, param, col) {
   for (pid in names(mw_list)) {
     mw <- mw_list[[pid]]
@@ -431,7 +443,7 @@ add_all_participants_lines <- function(mw_list, param, col) {
 # Plot each parameter with linear + PT overlaid
 for (param in params_to_check) {
 
-  # Get a sensible y-range across both models (avoid crashing if some are NULL)
+  # Get a sensible y-range across both models
   all_vals_lin <- unlist(lapply(results$mw_linear, function(x) if (!is.null(x)) x[[param]] else NA_real_))
   all_vals_pt  <- unlist(lapply(results$mw_pt,     function(x) if (!is.null(x)) x[[param]] else NA_real_))
   y_rng <- range(c(all_vals_lin, all_vals_pt), na.rm = TRUE)
@@ -484,3 +496,4 @@ for (k in seq_along(params_to_check)) {
 
 sd_by_param
 
+# End of code
