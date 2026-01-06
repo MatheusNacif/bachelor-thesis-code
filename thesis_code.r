@@ -220,6 +220,9 @@ bounds_pt <- list(
 
 k_linear <- 9
 k_pt     <- 12
+
+# the following is used to set DEoptim population size
+# according to their recommendation: NP = 10 * D
 p_vec_linear <- length(bounds_linear$lower)
 p_vec_pt     <- length(bounds_pt$lower)
 
