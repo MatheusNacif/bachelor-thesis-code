@@ -425,53 +425,121 @@ mean(results$summary$p_LR < .05)
 summary(results$summary$acfPA_lin - results$summary$acfPA_pt)
 summary(results$summary$acfNA_lin - results$summary$acfNA_pt)
 
-# Temporal Instability Analysis across all participants
-# Moving-window trajectories: inspect temporal instability for multiple parameters
-
+# Temporal Instability Analysis
+# # Plots 3 participants: highest variability, lowest variability, and average (median) variability
 params_to_check <- c("beta_PA", "beta_NA", "gamma_PA", "gamma_NA")
 
-# add all participants' trajectories to an existing plot
-add_all_participants_lines <- function(mw_list, param, col) {
-  for (pid in names(mw_list)) {
+# Reference parameter for ranking variability
+ref_param <- "beta_PA"
+
+# Compute within-participant SD for the reference parameter (PT model used for ranking)
+sd_ref <- sapply(results$mw_pt, function(x) {
+  if (!is.null(x) && ref_param %in% names(x)) sd(x[[ref_param]], na.rm = TRUE) else NA_real_
+})
+sd_ref <- sd_ref[!is.na(sd_ref)]
+sd_ref_sorted <- sort(sd_ref)
+
+# Select participants
+pid_low  <- names(sd_ref_sorted)[1]
+pid_high <- names(sd_ref_sorted)[length(sd_ref_sorted)]
+pid_mid  <- names(sd_ref_sorted)[ceiling(length(sd_ref_sorted) / 2)]
+
+# Fixed order for plotting and legend
+selected_pids <- c(pid_low, pid_mid, pid_high)
+
+# Color mapping by variability group
+group_cols <- c(
+  "Lowest variability"  = "black",
+  "Average variability" = "green3",
+  "Highest variability" = "red"
+)
+
+# Plot settings: fixed x-axis from known window count
+window_size <- 60
+Tn_total <- 152
+n_windows <- Tn_total - window_size + 1  # 93
+x_rng <- c(1, n_windows)
+
+# Helper: adds selected participants with fixed colors
+add_selected_lines_by_group <- function(mw_list, param, selected_pids, group_cols, lwd = 2) {
+  for (i in seq_along(selected_pids)) {
+    pid <- selected_pids[i]
     mw <- mw_list[[pid]]
     if (!is.null(mw) && param %in% names(mw)) {
-      lines(mw$start_trial, mw[[param]], col = col)
+      col <- unname(group_cols[i])
+      lines(mw$start_trial, mw[[param]], col = col, lwd = lwd)
     }
   }
 }
 
-# Plot each parameter with linear + PT overlaid
+# Plotting: two plots per parameter (Linear then PT), pooled y-range for comparability
 for (param in params_to_check) {
 
-  # Get a sensible y-range across both models
-  all_vals_lin <- unlist(lapply(results$mw_linear, function(x) if (!is.null(x)) x[[param]] else NA_real_))
-  all_vals_pt  <- unlist(lapply(results$mw_pt,     function(x) if (!is.null(x)) x[[param]] else NA_real_))
-  y_rng <- range(c(all_vals_lin, all_vals_pt), na.rm = TRUE)
+  # pooled y-range across models, for selected participants
+  vals_lin <- unlist(lapply(selected_pids, function(pid) {
+    mw <- results$mw_linear[[pid]]
+    if (!is.null(mw)) mw[[param]] else NA_real_
+  }))
+  vals_pt <- unlist(lapply(selected_pids, function(pid) {
+    mw <- results$mw_pt[[pid]]
+    if (!is.null(mw)) mw[[param]] else NA_real_
+  }))
+  y_rng <- range(c(vals_lin, vals_pt), na.rm = TRUE)
 
+  # ---- Linear plot
   plot(
     NA,
-    xlim = c(1, max(data$TrialNumber, na.rm = TRUE)),
+    xlim = x_rng,
     ylim = y_rng,
     xlab = "Window start trial",
     ylab = param,
-    main = paste("Moving-window trajectories:", param)
+    main = paste("Moving-window trajectories (Linear):", param)
   )
 
-  # Linear trajectories (black, transparent)
-  add_all_participants_lines(results$mw_linear, param, col = rgb(0, 0, 0, 0.20))
-
-  # PT trajectories (red, transparent)
-  add_all_participants_lines(results$mw_pt, param, col = rgb(1, 0, 0, 0.20))
+  add_selected_lines_by_group(
+    mw_list = results$mw_linear,
+    param = param,
+    selected_pids = selected_pids,
+    group_cols = group_cols
+  )
 
   legend(
     "topright",
-    legend = c("Linear", "Prospect Theory"),
-    col = c(rgb(0, 0, 0, 0.60), rgb(1, 0, 0, 0.60)),
+    legend = names(group_cols),
+    col = group_cols,
     lty = 1,
+    lwd = 2,
+    cex = 0.9,
+    bty = "n"
+  )
+
+  # ---- PT plot
+  plot(
+    NA,
+    xlim = x_rng,
+    ylim = y_rng,
+    xlab = "Window start trial",
+    ylab = param,
+    main = paste("Moving-window trajectories (Prospect Theory):", param)
+  )
+
+  add_selected_lines_by_group(
+    mw_list = results$mw_pt,
+    param = param,
+    selected_pids = selected_pids,
+    group_cols = group_cols
+  )
+
+  legend(
+    "topright",
+    legend = names(group_cols),
+    col = group_cols,
+    lty = 1,
+    lwd = 2,
+    cex = 0.9,
     bty = "n"
   )
 }
-
 
 # Within-participant variability across windows:
 # compute SD per parameter (per participant) for both models
